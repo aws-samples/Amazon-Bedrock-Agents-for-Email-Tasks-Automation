@@ -157,15 +157,15 @@ By following these steps, you'll have the necessary configurations in place to s
 
 
 
-## Testing the solution
+## Testing The Solution
 
-After the deployment, you should be able to send emails to inquire about the menu items on the "The Regrettable Experience" resturant and make, update or cancel reservations. 
+After deployment, you should be able to send emails to inquire about the menu items at "The Regrettable Experience" restaurant and make, update, or cancel reservations.
 
+The following examples demonstrate that the email assistant was able to:
 
-The following email show that the email assistant was able to :
-- Ask for additional information from the user to make table reservation, when the customer's intent was not clear.
-- Agent was also able to make the table reservation by invoking Lambda APIs and also answer customer's question about the menu using Amazon Knowledge Base in same query.
-- The email containing objectionable content was also blocked by Amazon Bedrock Guardrails.
+- Ask for additional information from the user to make a table reservation when the customer's intent was not clear.
+- Make the table reservation by invoking Lambda APIs and answer the customer's question about the menu using the Amazon Knowledge Base in the same query.
+- Block emails containing objectionable content using Amazon Bedrock Guardrails.
 
 
 ![image of sample email conversation between customer and bot](documents/images/email-test-table-reservation.png "image of sample email conversation between customer and bot")
