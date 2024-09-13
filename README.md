@@ -1,4 +1,4 @@
-# Automate Email Responses Using Amazon Bedrock Agents and Knowledge Bases
+# Enhanced Email Automation for Task Management: Leveraging Amazon Bedrock Agents, Amazon Bedrock Knowledge Bases and Amazon Bedrock Guardrails
 
 
 > Amazon Bedrock is a fully managed service that offers a choice of high-performing foundation models (FMs) from leading AI companies like AI21 Labs, Anthropic, Cohere, Meta, Mistral AI, Stability AI, and Amazon through a single API, along with a broad set of capabilities you need to build generative AI applications with security, privacy, and responsible AI. Using Amazon Bedrock, you can easily experiment with and evaluate top FMs for your use case, privately customize them with your data using techniques such as fine-tuning and Retrieval Augmented Generation (RAG), and build agents that execute tasks using your enterprise systems and data sources. Since Amazon Bedrock is serverless, you don't have to manage any infrastructure, and you can securely integrate and deploy generative AI capabilities into your applications using the AWS services you are already familiar with.
@@ -6,16 +6,16 @@
 ## Introduction
 Email serves as a crucial communication tool for businesses, but traditional processing methods often fall short when handling the volume of incoming messages. This can lead to inefficiencies, delays, and errors, diminishing customer satisfaction.
 
-## Understanding the Challenges
+### Understanding the Challenges
 Manual email processing introduces delays and errors, impacting customer satisfaction. Key challenges include the need for ongoing training for support staff, difficulties in managing and retrieving scattered information, and ensuring consistency across different agents' responses.
 
-## The Imperative for AI-Driven Solutions
+### The Imperative for AI-Driven Solutions
 Businesses are adopting Generative AI to automate and refine email response processes. AI integration accelerates response times and increases the accuracy and relevance of communications, enhancing customer satisfaction.
 
-## Current State of Knowledge Management in Businesses
+### Current State of Knowledge Management in Businesses
 Organizations possess extensive repositories of digital documents and data that remain underutilized due to their unstructured and dispersed nature. Additionally, while specific APIs and applications exist to handle customer service tasks, they often function in silos and lack integration.
 
-## Characteristics of an Effective AI-Powered Email Agent
+### Characteristics of an Effective AI-Powered Email Agent
 A robust AI-driven email support agent must:
 1. <strong>Comprehensively Access and Apply Knowledge:</strong> Extract and utilize information from various file formats and data stores across the organization to inform customer interactions.
 2. <strong>Seamlessly Integrate with APIs:</strong>  Interact with existing business APIs to execute real-time actions such as transaction processing or customer data updates directly via email.
@@ -51,7 +51,7 @@ The diagram provides a detailed view of the architecture implemented to enhance 
 3. **Information Repository**:
    - **[Amazon Bedrock Knowledge Bases](https://aws.amazon.com/bedrock/knowledge-bases/) and [Amazon OpenSearch Serverless](https://aws.amazon.com/opensearch-service/features/serverless/)**: The system indexes documents and files stored in Amazon S3 using OpenSearch for quick retrieval. These indexed documents provide a comprehensive base of knowledge that the AI agents consult to inform their responses.
 4. **Business Applications**:
-   - **Business APIs**: These are invoked by AI agents when specific transactions or updates need to be executed in response to a customer's request. The APIs ensure that all actions taken are appropriate and accurate as per the processed instructions.
+   - **[AWS Lambda](https://aws.amazon.com/pm/lambda/)**: These are invoked by AI agents when specific transactions or updates need to be executed in response to a customer's request. The APIs ensure that all actions taken are appropriate and accurate as per the processed instructions.
 5. **Outbond Email Service**:
    - After the response email is finalized by the AI agents, it is sent to [Amazon Simple Email Service (SES)](https://aws.amazon.com/ses/) which then dispatches the response back to the customer, completing the interaction loop.
 
