@@ -16,7 +16,6 @@ import crypto from 'crypto';
 const workMailClient = new WorkMailClient({ credentials: defaultProvider(), region: process.env.AWS_REGION });
 const secretsManagerClient = new SecretsManagerClient({ credentials: defaultProvider(), region: process.env.AWS_REGION });
 const userName = 'support';
-import { validateId } from '../../common/index.mjs';
 
 export async function handler(event, context) {
     console.log(event);
@@ -37,8 +36,8 @@ export async function handler(event, context) {
 }
 
 async function onCreate(orgName, resourceId) {
-    sanitizedResourceId = validateId(resourceId, 'resourceId');
-    sanitizedOrgName = validateId(orgName, 'orgName');
+    const sanitizedResourceId = validateId(resourceId, 'resourceId');
+    const sanitizedOrgName = validateId(orgName, 'orgName');
     try {
         let organizationId;
         const existingOrg = await findExistingOrganization(sanitizedOrgName);
@@ -51,9 +50,9 @@ async function onCreate(orgName, resourceId) {
                 Alias: sanitizedOrgName
             };
             const command = new CreateOrganizationCommand(input);
-            const createOrgResponse = sendCommand(command);
+            const createOrgResponse = await sendCommand(command);
             console.log(`Organization created with ID: ${createOrgResponse.OrganizationId}`);
-            await isOrganizationActive(createOrgResponse.OrganizationId, sanitizedOrgName);
+            await isOrganizationActive(createOrgResponse.OrganizationId);
             organizationId = createOrgResponse.OrganizationId;
         }
 
@@ -79,8 +78,8 @@ async function onUpdate(event) {
 }
 
 async function onDelete(orgName, resourceId) {
-    sanitizedResourceId = validateId(resourceId, 'resourceId');
-    sanitizedOrgName = validateId(orgName, 'orgName');
+    const sanitizedResourceId = validateId(resourceId, 'resourceId');
+    const sanitizedOrgName = validateId(orgName, 'orgName');
 
     const orgInfo = await findExistingOrganization(sanitizedOrgName);
     if (!orgInfo) {
@@ -97,7 +96,7 @@ async function onDelete(orgName, resourceId) {
             OrganizationId: organizationId
         };
         const command = new ListUsersCommand(input);
-        const userAvail = sendCommand(command);
+        const userAvail = await sendCommand(command);
         for (const user of userAvail.Users) {
             if (user.Name === userName) {
                 await deregisterAndDeleteUser(organizationId, user.Id);
@@ -122,8 +121,8 @@ async function onDelete(orgName, resourceId) {
 }
 
 async function manageUser(orgId, orgName) {
-    sanitizedOrgId = validateId(orgId, 'orgId');
-    sanitizedOrgName = validateId(orgName, 'orgName');
+    const sanitizedOrgId = validateId(orgId, 'orgId');
+    const sanitizedOrgName = validateId(orgName, 'orgName');
     const existingUser = await findExistingUser(sanitizedOrgId, userName);
     if (existingUser) {
         console.log(`User 'support' already exists in organization.`);
@@ -134,14 +133,13 @@ async function manageUser(orgId, orgName) {
 }
 
 async function findExistingOrganization(orgAlias) {
-    sanitizedOrgAlias = validateId(orgAlias, 'orgAlias');
-    const orgs = sendCommand(new ListOrganizationsCommand({}));
+    const sanitizedOrgAlias = validateId(orgAlias, 'orgAlias');
+    const orgs = await sendCommand(new ListOrganizationsCommand({}));
     return orgs.OrganizationSummaries.find(org => org.Alias.toLowerCase() === sanitizedOrgAlias.toLowerCase() && org.State === 'Active');
 }
 
-async function isOrganizationActive(orgId, orgName) {
-    sanitizedOrgId = validateId(orgId, 'orgId');
-    sanitizedOrgName = validateId(orgName, 'orgName');
+async function isOrganizationActive(orgId) {
+    const sanitizedOrgId = validateId(orgId, 'orgId');
 
     while (true) {
         await new Promise(resolve => setTimeout(resolve, 10000)); // 10 seconds delay
@@ -149,7 +147,7 @@ async function isOrganizationActive(orgId, orgName) {
             OrganizationId: sanitizedOrgId
         }
         const command = new DescribeOrganizationCommand(input);
-        const orgDesc = sendCommand(command);
+        const orgDesc = await sendCommand(command);
         if (orgDesc.State === 'Active') {
             console.log(`Organization is active: ${orgDesc.State}`);
             break;
@@ -159,20 +157,20 @@ async function isOrganizationActive(orgId, orgName) {
 }
 
 async function createUser(orgId, orgName) {
-    sanitizedOrgId = validateId(orgId, 'orgId');
-    sanitizedOrgName = validateId(orgName, 'orgName');
+    const sanitizedOrgId = validateId(orgId, 'orgId');
+    const sanitizedOrgName = validateId(orgName, 'orgName');
 
     const userName = "support";
     const password = generateSecurePassword();
     try {
         const input = {
-            OrganizationId: sanitizedUserName,
+            OrganizationId: sanitizedOrgId,
             Name: userName,
             DisplayName: userName,
             Password: password,
         };
         const command = new CreateUserCommand(input);
-        const userResponse = sendCommand(command);
+        const userResponse = await sendCommand(command);
         console.log(`User ${userName} created with ID: ${userResponse.UserId}`);
         await secretsManagerClient.send(new PutSecretValueCommand({
             SecretId: process.env.SECRET_ARN,
@@ -181,7 +179,7 @@ async function createUser(orgId, orgName) {
         console.log(`Credentials stored in Secrets Manager under ARN: ${process.env.SECRET_ARN}`);
         try {
             await workMailClient.send(new RegisterToWorkMailCommand({
-                OrganizationId: sanitizedUserName,
+                OrganizationId: sanitizedOrgId,
                 EntityId: userResponse.UserId,
                 Email: `${userName}@${sanitizedOrgName}.awsapps.com`.toLowerCase()
             }));
@@ -199,11 +197,11 @@ async function createUser(orgId, orgName) {
 }
 
 async function findExistingUser(orgId, userName) {
-    sanitizedOrgId = validateId(orgId, 'orgId');
-    sanitizedUserName = validateId(userName, 'userName');
+    const sanitizedOrgId = validateId(orgId, 'orgId');
+    const sanitizedUserName = validateId(userName, 'userName');
     const input = { OrganizationId: sanitizedOrgId };
     const listCommand = new ListUsersCommand(input);
-    const users = sendCommand(listCommand);
+    const users = await sendCommand(listCommand);
     return users.Users.find(user => user.Name === sanitizedUserName && user.State !== 'DELETED');
 }
 
@@ -230,8 +228,8 @@ async function sendCommand(command) {
 }
 
 async function deregisterAndDeleteUser(orgId, userId) {
-    sanitizedOrgId = validateId(orgId, 'orgId');
-    sanitizedUserId = validateId(userId, 'userId');
+    const sanitizedOrgId = validateId(orgId, 'orgId');
+    const sanitizedUserId = validateId(userId, 'userId');
 
     try {
         const input = {
@@ -241,23 +239,34 @@ async function deregisterAndDeleteUser(orgId, userId) {
 
         const deregister = new DeregisterFromWorkMailCommand(input);
 
-        sendCommand(deregister);
+        await sendCommand(deregister);
 
         const deleteUser = new DeleteUserCommand({
             OrganizationId: sanitizedOrgId,
             UserId: sanitizedUserId
         })
-        sendCommand(deleteUser);
+        await sendCommand(deleteUser);
     } catch (error) {
         console.log(`Error deleting users: ${error}`);
     }
 }
 
 async function deleteOrganization(orgId) {
-    sanitizedOrgId = validateId(orgId, 'orgId');
+    const sanitizedOrgId = validateId(orgId, 'orgId');
     const input = {
         OrganizationId: sanitizedOrgId
     };
     const delCommand = new DeleteOrganizationCommand(input);
-    sendCommand(delCommand);
+    await sendCommand(delCommand);
+}
+function validateId(id, type) {
+    if (typeof id !== 'string' || id.length === 0 || id.length > 1024) {
+        throw new Error(`Invalid ${type}. It must be a non-empty string with a maximum length of 1024 characters.`);
+    }
+    return id
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
 }

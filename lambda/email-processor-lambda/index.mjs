@@ -2,7 +2,6 @@ import { WorkMailMessageFlowClient, GetRawMessageContentCommand } from "@aws-sdk
 import { SESClient, SendEmailCommand } from "@aws-sdk/client-ses";
 import { simpleParser } from 'mailparser';
 import { BedrockAgentRuntimeClient, InvokeAgentCommand } from "@aws-sdk/client-bedrock-agent-runtime";
-import { validateId, validateJson } from '../../common/index.mjs';
 
 const workMailClient = new WorkMailMessageFlowClient({ region: process.env.AWS_REGION });
 const sesClient = new SESClient({ region: process.env.AWS_REGION });
@@ -10,7 +9,6 @@ const sesClient = new SESClient({ region: process.env.AWS_REGION });
 async function parseEmailContent(stream) {
     return simpleParser(stream);
 }
-
 
 export async function handler(event) {
 
@@ -34,8 +32,8 @@ export async function handler(event) {
         const client = new BedrockAgentRuntimeClient({ region: process.env.AWS_REGION });
         const agentId = process.env.AGENT_ID;
         const agentAliasId = process.env.AGENT_ALIAS_ID;
-        sanitizedSessionId = validateId(msgId, 'sessionId');
-        sanitizedEmailInfo = JSON.stringify(validateJson(emailInfo, 'emailInfo'));
+        const sanitizedSessionId = validateId(msgId, 'sessionId');
+        const sanitizedEmailInfo = JSON.stringify(emailInfo);
     
         const input = {
             agentId,
@@ -66,7 +64,7 @@ export async function handler(event) {
         const emailResponse = bedrockResult.completion;
         const originalEmailInfo = emailParsed;
         const sourceEmail = process.env.SUPPORT_EMAIL_ADDRESS;
-        const destinationEmail = originalEmailInfo.from.text; // Updated to use parsed email info
+        const destinationEmail = originalEmailInfo.from.text; 
         const body = `${emailResponse}\n\n---\nOriginal Message:\nFrom: ${originalEmailInfo.from.text}\nSubject: ${originalEmailInfo.subject}\n\n${originalEmailInfo.text}`;
         const sub = `${originalEmailInfo.subject}`
 
@@ -100,4 +98,16 @@ export async function handler(event) {
         console.error(`Error processing message: ${error}`);
         throw error;
     }
+}
+
+function validateId(id, type) {
+    if (typeof id !== 'string' || id.length === 0 || id.length > 1024) {
+        throw new Error(`Invalid ${type}. It must be a non-empty string with a maximum length of 1024 characters.`);
+    }
+    return id
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
 }

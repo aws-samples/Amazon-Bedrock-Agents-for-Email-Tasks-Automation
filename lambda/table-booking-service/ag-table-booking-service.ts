@@ -1,8 +1,7 @@
 import { DynamoDBClient, GetItemCommand, PutItemCommand, DeleteItemCommand, DescribeTableCommand, DeleteItemCommandInput } from "@aws-sdk/client-dynamodb";
 const crypto = require('crypto');
 const ddbClient = new DynamoDBClient({});
-const tableName = "BookingTable"; // TODO: Get the table name from Lambda environment variable
-import { validateId } from '../../common/index.mjs';
+const tableName = "BookingTable"; 
 
 /**
  * Describes the DynamoDB table by sending a DescribeTableCommand.
@@ -250,4 +249,16 @@ function handleResponse(actionGroup: string, function_: string, responseBody: an
     const functionResponse = { response: actionResponse, messageVersion };
     console.log("Response:", functionResponse);
     return functionResponse;
+}
+
+function validateId(id: any, type:any) {
+    if (typeof id !== 'string' || id.length === 0 || id.length > 1024) {
+        throw new Error(`Invalid ${type}. It must be a non-empty string with a maximum length of 1024 characters.`);
+    }
+    return id
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
 }
