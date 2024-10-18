@@ -81,6 +81,6 @@ export class WorkmailCreateOrgConstruct extends Construct {
     }
 
     private createAccountIdHash(accountId: string): string {
-        return crypto.createHash('sha256').update(accountId).digest('hex').substring(0, 12);
+        return crypto.createHash('sha256').update(accountId.trim().toLowerCase()).digest('hex').substring(0, 12);
     }
 }

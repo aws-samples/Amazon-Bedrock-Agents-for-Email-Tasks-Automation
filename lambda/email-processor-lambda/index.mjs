@@ -38,7 +38,7 @@ export async function handler(event) {
         const input = {
             agentId,
             agentAliasId,
-            sanitizedSessionId,
+            sessionId: sanitizedSessionId,
             inputText: sanitizedEmailInfo
         };
     
