@@ -2,6 +2,7 @@ import { WorkMailMessageFlowClient, GetRawMessageContentCommand } from "@aws-sdk
 import { SESClient, SendEmailCommand } from "@aws-sdk/client-ses";
 import { simpleParser } from 'mailparser';
 import { BedrockAgentRuntimeClient, InvokeAgentCommand } from "@aws-sdk/client-bedrock-agent-runtime";
+import { validateId, validateJson } from '../../common/index.mjs';
 
 const workMailClient = new WorkMailMessageFlowClient({ region: process.env.AWS_REGION });
 const sesClient = new SESClient({ region: process.env.AWS_REGION });
@@ -10,63 +11,6 @@ async function parseEmailContent(stream) {
     return simpleParser(stream);
 }
 
-async function invokeBedrockAgent(emailInfo, sessionId) {
-    const client = new BedrockAgentRuntimeClient({ region: process.env.AWS_REGION });
-    const agentId = process.env.AGENT_ID;
-    const agentAliasId = process.env.AGENT_ALIAS_ID;
-
-    const command = new InvokeAgentCommand({
-        agentId,
-        agentAliasId,
-        sessionId,
-        inputText: JSON.stringify(emailInfo),
-    });
-
-    try {
-        let completion = "";
-        const response = await client.send(command);
-        for await (let chunkEvent of response.completion) {
-            const chunk = chunkEvent.chunk;
-            const decodedResponse = new TextDecoder("utf-8").decode(chunk.bytes);
-            completion += decodedResponse;
-        }
-        return { sessionId: sessionId, completion };
-    } catch (err) {
-        console.error('Error invoking Bedrock agent:', err);
-        throw err;
-    }
-}
-
-async function sendResponseEmail(emailResponse, originalEmailInfo) {
-    const sourceEmail = process.env.SUPPORT_EMAIL_ADDRESS;
-    const destinationEmail = originalEmailInfo.from.text; // Updated to use parsed email info
-
-    const responseEmail = {
-        Source: sourceEmail,
-        Destination: {
-            ToAddresses: [destinationEmail]
-        },
-        Message: {
-            Subject: {
-                Data: `${originalEmailInfo.subject}`
-            },
-            Body: {
-                Text: {
-                    Data: `${emailResponse}\n\n---\nOriginal Message:\nFrom: ${originalEmailInfo.from.text}\nSubject: ${originalEmailInfo.subject}\n\n${originalEmailInfo.text}`
-                }
-            }
-        }
-    };
-
-    try {
-        const sendCommand = new SendEmailCommand(responseEmail);
-        await sesClient.send(sendCommand);
-        console.log('Response email sent successfully.');
-    } catch (error) {
-        console.error('Failed to send response email:', error);
-        throw error;
-    }
-}
 
 export async function handler(event) {
 
@@ -86,10 +30,72 @@ export async function handler(event) {
         };
 
         console.log(emailInfo);
-        const bedrockResult = await invokeBedrockAgent(emailInfo, msgId);
-        console.log('Bedrock Agent Response:', bedrockResult);
 
-        await sendResponseEmail(bedrockResult.completion, emailParsed);
+        const client = new BedrockAgentRuntimeClient({ region: process.env.AWS_REGION });
+        const agentId = process.env.AGENT_ID;
+        const agentAliasId = process.env.AGENT_ALIAS_ID;
+        sanitizedSessionId = validateId(msgId, 'sessionId');
+        sanitizedEmailInfo = JSON.stringify(validateJson(emailInfo, 'emailInfo'));
+    
+        const input = {
+            agentId,
+            agentAliasId,
+            sanitizedSessionId,
+            inputText: sanitizedEmailInfo
+        };
+    
+        const command = new InvokeAgentCommand(input);
+        let bedrockResult;
+
+        try {
+            let completion = "";
+            const response = await client.send(command);
+            for await (let chunkEvent of response.completion) {
+                const chunk = chunkEvent.chunk;
+                const decodedResponse = new TextDecoder("utf-8").decode(chunk.bytes);
+                completion += decodedResponse;
+            }
+             bedrockResult= { sessionId: sanitizedSessionId, completion };
+        } catch (err) {
+            console.error('Error invoking Bedrock agent:', err);
+            throw err;
+        }
+
+
+        console.log('Bedrock Agent Response:', bedrockResult);
+        const emailResponse = bedrockResult.completion;
+        const originalEmailInfo = emailParsed;
+        const sourceEmail = process.env.SUPPORT_EMAIL_ADDRESS;
+        const destinationEmail = originalEmailInfo.from.text; // Updated to use parsed email info
+        const body = `${emailResponse}\n\n---\nOriginal Message:\nFrom: ${originalEmailInfo.from.text}\nSubject: ${originalEmailInfo.subject}\n\n${originalEmailInfo.text}`;
+        const sub = `${originalEmailInfo.subject}`
+
+        const responseEmail = {
+            Source: sourceEmail,
+            Destination: {
+                ToAddresses: [destinationEmail]
+            },
+            Message: {
+                Subject: {
+                    Data: sub
+                },
+                Body: {
+                    Text: {
+                        Data: body
+                    }
+                }
+            }
+        };
+
+        try {
+            const sendCommand = new SendEmailCommand(responseEmail);
+            await sesClient.send(sendCommand);
+            console.log('Response email sent successfully.');
+        } catch (error) {
+            console.error('Failed to send response email:', error);
+            throw error;
+        }
+
     } catch (error) {
         console.error(`Error processing message: ${error}`);
         throw error;

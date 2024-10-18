@@ -1,9 +1,8 @@
 import { DynamoDBClient, GetItemCommand, PutItemCommand, DeleteItemCommand, DescribeTableCommand, DeleteItemCommandInput } from "@aws-sdk/client-dynamodb";
-// import { v4 as uuidv4 } from "uuid";
-
+const crypto = require('crypto');
 const ddbClient = new DynamoDBClient({});
 const tableName = "BookingTable"; // TODO: Get the table name from Lambda environment variable
-
+import { validateId } from '../../common/index.mjs';
 
 /**
  * Describes the DynamoDB table by sending a DescribeTableCommand.
@@ -54,6 +53,16 @@ async function getBookingDetails(bookingId: string) {
     }
 }
 
+function generateSecureBookingId() {
+    // Generate 4 random bytes (32 bits)
+    const randomBytes = crypto.randomBytes(4);
+    // Convert to an integer
+    const randomInt = randomBytes.readUInt32BE(0);
+    // Scale to the range 0-99999999
+    const scaledInt = Math.floor(randomInt / (0xffffffff + 1) * 1e8);
+    // Convert to string and pad with leading zeros
+    return scaledInt.toString().padStart(8, '0');
+}
 
 /**
  * Creates a new booking in the DynamoDB table with the provided details.
@@ -66,20 +75,20 @@ async function getBookingDetails(bookingId: string) {
  */
 async function createBooking(date: string, name: string, hour: string, numGuests: number) {
     try {
-        const bookingId = Math.floor(Math.random() * 1e8).toString().padStart(8, '0');
+        const bookingId = generateSecureBookingId();
         // const bookingId = uuidv4().slice(0, 8);
-        await ddbClient.send(
-            new PutItemCommand({
-                TableName: tableName,
-                Item: {
-                    booking_id: { S: bookingId },
-                    date: { S: date },
-                    name: { S: name },
-                    hour: { S: hour },
-                    num_guests: { N: numGuests.toString() },
-                },
-            })
-        );
+        const input = {
+            TableName: tableName,
+            Item: {
+                booking_id: { S: bookingId },
+                date: { S: date },
+                name: { S: name },
+                hour: { S: hour },
+                num_guests: { N: numGuests.toString() },
+            }
+        };
+        const command = new PutItemCommand(input);
+        await sendCommand(command); 
         console.log(`Table booked successfully for ${name} on ${date} at ${hour} for ${numGuests} guests. Your booking ID is ${bookingId}`);
         return { bookingId };
     } catch (err) {
@@ -106,28 +115,36 @@ async function deleteBooking(bookingId: string) {
         const keySchema = tableDescription.KeySchema;
         console.log(`Table keySchema: ${JSON.stringify(keySchema)}`);
 
-        console.log(`Deleting booking with ID ${bookingId}`);
+        const sanitizedBookingId = validateId(bookingId, 'bookingId');
+        console.log(`Deleting booking with ID ${sanitizedBookingId}`);
         console.log(`tableName: ${tableName}`);
 
+ 
         const commandParams: DeleteItemCommandInput = {
             TableName: tableName,
             Key: {
-                "booking_id": { S: bookingId },
+                "booking_id": { S: sanitizedBookingId },
             },
         };
         console.log(`Key: ${JSON.stringify(commandParams.Key)}`);
 
-        const response = await ddbClient.send(new DeleteItemCommand(commandParams));
+        const command = new DeleteItemCommand(commandParams);
+
+        const response = await sendCommand(command);
 
         if (response.$metadata.httpStatusCode === 200) {
-            return { message: `Booking with ID ${bookingId} deleted successfully` };
+            return { message: `Booking with ID ${sanitizedBookingId} deleted successfully` };
         } else {
-            return { message: `Failed to delete booking with ID ${bookingId} ` };
+            return { message: `Failed to delete booking with ID ${sanitizedBookingId} ` };
         }
     } catch (e) {
         console.error("Error deleting booking:", e);
         return { error: "Error deleting booking" };
     }
+}
+
+async function sendCommand(command: any) {
+    return await ddbClient.send(command);
 }
 
 /**
@@ -234,24 +251,3 @@ function handleResponse(actionGroup: string, function_: string, responseBody: an
     console.log("Response:", functionResponse);
     return functionResponse;
 }
-
-
-// function parseHour(hourString: string): number | undefined {
-    //     const hourRegex = /^(\d{1,2}):(\d{2})$/;
-    //     const match = hourString.match(hourRegex);
-    
-    //     if (!match) {
-    //         console.error(`Invalid hour format: ${hourString}`);
-    //         return undefined;
-    //     }
-    
-    //     const [_, hours, minutes] = match.map(Number);
-    //     const parsedHour = hours + (minutes / 60);
-    
-    //     if (parsedHour < 0 || parsedHour >= 24) {
-    //         console.error(`Invalid hour value: ${parsedHour}`);
-    //         return undefined;
-    //     }
-    
-    //     return parsedHour;
-    // }

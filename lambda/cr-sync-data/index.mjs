@@ -9,30 +9,26 @@ export async function handler(event, context) {
     const dataSourceId = process.env.DATA_SOURCE_ID;
 
     if (requestType === 'Create') {
-        return await onCreate(brAgentClient, knowledgeBaseId, dataSourceId);
+        try {
+            console.log(`invoking datasync for kb ${knowledgeBaseId} and DS ${dataSourceId}`);
+            const input = {
+                knowledgeBaseId,
+                sanitizedDataSourceId
+            };
+            const command = new StartIngestionJobCommand(input);
+            const dataSyncResponse = await brAgentClient.send(command);
+            return {
+                PhysicalResourceId: dataSyncResponse && dataSyncResponse.ingestionJob
+                    ? `datasync_${dataSyncResponse.ingestionJob.ingestionJobId}`
+                    : 'datasync_failed',
+            };
+        } catch (err) {
+            return {
+                PhysicalResourceId: 'datasync_failed',
+                Reason: `Failed to start ingestion job: ${err}`,
+            };
+        }
     } else {
         return { PhysicalResourceId: physicalResourceId };
     }
 };
-
-async function onCreate(brAgentClient, knowledgeBaseId, dataSourceId) {
-    try {
-        console.log(`invoking datasync for kb ${knowledgeBaseId} and DS ${dataSourceId}`);
-        const dataSyncResponse = await brAgentClient.send(
-            new StartIngestionJobCommand({
-                knowledgeBaseId,
-                dataSourceId,
-            })
-        );
-        return {
-            PhysicalResourceId: dataSyncResponse && dataSyncResponse.ingestionJob
-                ? `datasync_${dataSyncResponse.ingestionJob.ingestionJobId}`
-                : 'datasync_failed',
-        };
-    } catch (err) {
-        return {
-            PhysicalResourceId: 'datasync_failed',
-            Reason: `Failed to start ingestion job: ${err}`,
-        };
-    }
-}

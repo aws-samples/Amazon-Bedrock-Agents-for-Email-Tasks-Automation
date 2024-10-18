@@ -12,10 +12,11 @@ import {
 } from "@aws-sdk/client-workmail";
 import { SecretsManagerClient, PutSecretValueCommand } from "@aws-sdk/client-secrets-manager";
 import { defaultProvider } from '@aws-sdk/credential-provider-node';
-
+import crypto from 'crypto';
 const workMailClient = new WorkMailClient({ credentials: defaultProvider(), region: process.env.AWS_REGION });
 const secretsManagerClient = new SecretsManagerClient({ credentials: defaultProvider(), region: process.env.AWS_REGION });
 const userName = 'support';
+import { validateId } from '../../common/index.mjs';
 
 export async function handler(event, context) {
     console.log(event);
@@ -36,26 +37,30 @@ export async function handler(event, context) {
 }
 
 async function onCreate(orgName, resourceId) {
+    sanitizedResourceId = validateId(resourceId, 'resourceId');
+    sanitizedOrgName = validateId(orgName, 'orgName');
     try {
         let organizationId;
-        const existingOrg = await findExistingOrganization(orgName);
+        const existingOrg = await findExistingOrganization(sanitizedOrgName);
 
         if (existingOrg) {
-            console.log(`Organization with alias '${orgName}' already exists.`);
+            console.log(`Organization with alias '${sanitizedOrgName}' already exists.`);
             organizationId = existingOrg.OrganizationId;
         } else {
-            const createOrgResponse = await workMailClient.send(new CreateOrganizationCommand({
-                Alias: orgName
-            }));
+            const input = {
+                Alias: sanitizedOrgName
+            };
+            const command = new CreateOrganizationCommand(input);
+            const createOrgResponse = sendCommand(command);
             console.log(`Organization created with ID: ${createOrgResponse.OrganizationId}`);
-            await isOrganizationActive(createOrgResponse.OrganizationId, orgName);
+            await isOrganizationActive(createOrgResponse.OrganizationId, sanitizedOrgName);
             organizationId = createOrgResponse.OrganizationId;
         }
 
         // Proceed to check or create user irrespective of whether the organization was newly created or already existed
-        await manageUser(organizationId, orgName);
+        await manageUser(organizationId, sanitizedOrgName);
         return {
-            PhysicalResourceId: resourceId,
+            PhysicalResourceId: sanitizedResourceId,
             Message: 'Create operation complete',
             Data: { OrganizationId: organizationId }
         };
@@ -74,20 +79,25 @@ async function onUpdate(event) {
 }
 
 async function onDelete(orgName, resourceId) {
-    const orgInfo = await findExistingOrganization(orgName);
+    sanitizedResourceId = validateId(resourceId, 'resourceId');
+    sanitizedOrgName = validateId(orgName, 'orgName');
+
+    const orgInfo = await findExistingOrganization(sanitizedOrgName);
     if (!orgInfo) {
-        console.log(`No organization found with the alias: ${orgName}. Exiting without action.`);
-        return { 
-            PhysicalResourceId: resourceId,
-            Message: `No organization found with the alias: ${orgName}. No action taken.` 
+        console.log(`No organization found with the alias: ${sanitizedOrgName}. Exiting without action.`);
+        return {
+            PhysicalResourceId: sanitizedResourceId,
+            Message: `No organization found with the alias: ${sanitizedOrgName}. No action taken.`
         };
     }
     const organizationId = orgInfo.OrganizationId;
     console.log(`Initiating deletion for organization ID: ${organizationId} and user: ${userName}`);
     try {
-        const userAvail = await workMailClient.send(new ListUsersCommand({
+        const input = {
             OrganizationId: organizationId
-        }));
+        };
+        const command = new ListUsersCommand(input);
+        const userAvail = sendCommand(command);
         for (const user of userAvail.Users) {
             if (user.Name === userName) {
                 await deregisterAndDeleteUser(organizationId, user.Id);
@@ -105,33 +115,41 @@ async function onDelete(orgName, resourceId) {
     catch (error) {
         console.error(`Error while deleting organization: ${error}`);
     }
-    return { 
-        PhysicalResourceId: resourceId, 
-        Message: 'Delete operation complete' 
+    return {
+        PhysicalResourceId: resourceId,
+        Message: 'Delete operation complete'
     };
 }
 
-async function manageUser(organizationId, orgName) {
-    const existingUser = await findExistingUser(organizationId, userName);
+async function manageUser(orgId, orgName) {
+    sanitizedOrgId = validateId(orgId, 'orgId');
+    sanitizedOrgName = validateId(orgName, 'orgName');
+    const existingUser = await findExistingUser(sanitizedOrgId, userName);
     if (existingUser) {
         console.log(`User 'support' already exists in organization.`);
         return { UserId: existingUser.Id, Message: "User already exists." };
     } else {
-        return await createUser(organizationId, orgName);
+        return await createUser(sanitizedOrgId, sanitizedOrgName);
     }
 }
 
 async function findExistingOrganization(orgAlias) {
-    const orgs = await workMailClient.send(new ListOrganizationsCommand({}));
-    return orgs.OrganizationSummaries.find(org => org.Alias.toLowerCase() === orgAlias.toLowerCase() && org.State === 'Active');
+    sanitizedOrgAlias = validateId(orgAlias, 'orgAlias');
+    const orgs = sendCommand(new ListOrganizationsCommand({}));
+    return orgs.OrganizationSummaries.find(org => org.Alias.toLowerCase() === sanitizedOrgAlias.toLowerCase() && org.State === 'Active');
 }
 
-async function isOrganizationActive(organizationId, orgName) {
+async function isOrganizationActive(orgId, orgName) {
+    sanitizedOrgId = validateId(orgId, 'orgId');
+    sanitizedOrgName = validateId(orgName, 'orgName');
+
     while (true) {
         await new Promise(resolve => setTimeout(resolve, 10000)); // 10 seconds delay
-        const orgDesc = await workMailClient.send(new DescribeOrganizationCommand({
-            OrganizationId: organizationId
-        }));
+        const input = {
+            OrganizationId: sanitizedOrgId
+        }
+        const command = new DescribeOrganizationCommand(input);
+        const orgDesc = sendCommand(command);
         if (orgDesc.State === 'Active') {
             console.log(`Organization is active: ${orgDesc.State}`);
             break;
@@ -140,16 +158,21 @@ async function isOrganizationActive(organizationId, orgName) {
     }
 }
 
-async function createUser(organizationId, orgName) {
+async function createUser(orgId, orgName) {
+    sanitizedOrgId = validateId(orgId, 'orgId');
+    sanitizedOrgName = validateId(orgName, 'orgName');
+
     const userName = "support";
     const password = generateSecurePassword();
     try {
-        const userResponse = await workMailClient.send(new CreateUserCommand({
-            OrganizationId: organizationId,
+        const input = {
+            OrganizationId: sanitizedUserName,
             Name: userName,
             DisplayName: userName,
             Password: password,
-        }));
+        };
+        const command = new CreateUserCommand(input);
+        const userResponse = sendCommand(command);
         console.log(`User ${userName} created with ID: ${userResponse.UserId}`);
         await secretsManagerClient.send(new PutSecretValueCommand({
             SecretId: process.env.SECRET_ARN,
@@ -158,11 +181,11 @@ async function createUser(organizationId, orgName) {
         console.log(`Credentials stored in Secrets Manager under ARN: ${process.env.SECRET_ARN}`);
         try {
             await workMailClient.send(new RegisterToWorkMailCommand({
-                OrganizationId: organizationId,
+                OrganizationId: sanitizedUserName,
                 EntityId: userResponse.UserId,
-                Email: `${userName}@${orgName}.awsapps.com`.toLowerCase()
+                Email: `${userName}@${sanitizedOrgName}.awsapps.com`.toLowerCase()
             }));
-            console.log(`User ${userName} registered to WorkMail with email: ${userName}@${orgName}.awsapps.com`);
+            console.log(`User ${userName} registered to WorkMail with email: ${userName}@${sanitizedOrgName}.awsapps.com`);
 
         } catch (error) {
             console.log(`Unable to register user. User must be manually enabled.`);
@@ -175,43 +198,66 @@ async function createUser(organizationId, orgName) {
     }
 }
 
-async function findExistingUser(organizationId, userName) {
-    const users = await workMailClient.send(new ListUsersCommand({
-        OrganizationId: organizationId
-    }));
-    console.log(users);
-    return users.Users.find(user => user.Name === userName && user.State !== 'DELETED');
+async function findExistingUser(orgId, userName) {
+    sanitizedOrgId = validateId(orgId, 'orgId');
+    sanitizedUserName = validateId(userName, 'userName');
+    const input = { OrganizationId: sanitizedOrgId };
+    const listCommand = new ListUsersCommand(input);
+    const users = sendCommand(listCommand);
+    return users.Users.find(user => user.Name === sanitizedUserName && user.State !== 'DELETED');
 }
 
 function generateSecurePassword() {
     const length = 16;
     const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+";
     let retVal = "";
-    for (let i = 0, n = charset.length; i < length; ++i) {
-        retVal += charset.charAt(Math.floor(Math.random() * n));
+    const randomBytes = crypto.randomBytes(length);
+
+    for (let i = 0; i < length; i++) {
+        retVal += charset[randomBytes[i] % charset.length];
     }
+
     return retVal;
 }
 
-async function deregisterAndDeleteUser(organizationId, userId) {
+async function sendCommand(command) {
     try {
-        await workMailClient.send(new DeregisterFromWorkMailCommand({
-            OrganizationId: organizationId,
-            EntityId: userId
-        }));
-        await workMailClient.send(new DeleteUserCommand({
-            OrganizationId: organizationId,
-            UserId: userId
-        }));
+        return await workMailClient.send(command);
+    } catch (error) {
+        console.error(`Error executing command: ${error}`);
+        throw error;
+    }
+}
+
+async function deregisterAndDeleteUser(orgId, userId) {
+    sanitizedOrgId = validateId(orgId, 'orgId');
+    sanitizedUserId = validateId(userId, 'userId');
+
+    try {
+        const input = {
+            OrganizationId: sanitizedOrgId,
+            EntityId: sanitizedUserId
+        };
+
+        const deregister = new DeregisterFromWorkMailCommand(input);
+
+        sendCommand(deregister);
+
+        const deleteUser = new DeleteUserCommand({
+            OrganizationId: sanitizedOrgId,
+            UserId: sanitizedUserId
+        })
+        sendCommand(deleteUser);
     } catch (error) {
         console.log(`Error deleting users: ${error}`);
     }
-
 }
 
-async function deleteOrganization(organizationId) {
-    await workMailClient.send(new DeleteOrganizationCommand({
-        OrganizationId: organizationId,
-        DeleteDirectory: true
-    }));
+async function deleteOrganization(orgId) {
+    sanitizedOrgId = validateId(orgId, 'orgId');
+    const input = {
+        OrganizationId: sanitizedOrgId
+    };
+    const delCommand = new DeleteOrganizationCommand(input);
+    sendCommand(delCommand);
 }
