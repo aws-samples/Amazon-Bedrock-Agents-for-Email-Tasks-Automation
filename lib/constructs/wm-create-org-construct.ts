@@ -7,7 +7,6 @@ import * as iam from 'aws-cdk-lib/aws-iam';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import { LogGroup } from "aws-cdk-lib/aws-logs";
 import { workmail_org_name, workmail_secret_name } from "../name_constants";
-import * as crypto from 'crypto';
 
 export class WorkmailCreateOrgConstruct extends Construct {
 
@@ -15,7 +14,7 @@ export class WorkmailCreateOrgConstruct extends Construct {
         super(scope, id);
 
         // Create a hashed unique identifier based on the account ID
-        const accountIdHash = this.createAccountIdHash(cdk.Stack.of(this).account);
+        const accountId = cdk.Stack.of(this).account;
 
         // Create a secret in Secrets Manager
         const workmailSecret = new secretsmanager.Secret(this, 'WorkmailSecret', {
@@ -66,7 +65,7 @@ export class WorkmailCreateOrgConstruct extends Construct {
             logGroup: logGroup,
             environment: {
                 SECRET_ARN: workmailSecret.secretArn,
-                WORKMAIL_ORG_NAME: `${workmail_org_name}-${accountIdHash}` 
+                WORKMAIL_ORG_NAME: `${workmail_org_name}-${accountId}` 
             }
         });
 
@@ -78,9 +77,5 @@ export class WorkmailCreateOrgConstruct extends Construct {
         const createWorkmailResource = new cdk.CustomResource(this, 'CreateWorkmailCR', {
             serviceToken: provider.serviceToken,
         });
-    }
-
-    private createAccountIdHash(accountId: string): string {
-        return crypto.createHash('sha256').update(accountId).digest('hex').substring(0, 12);
     }
 }
