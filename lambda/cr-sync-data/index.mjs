@@ -13,7 +13,7 @@ export async function handler(event, context) {
             console.log(`invoking datasync for kb ${knowledgeBaseId} and DS ${dataSourceId}`);
             const input = {
                 knowledgeBaseId,
-                sanitizedDataSourceId
+                dataSourceId
             };
             const command = new StartIngestionJobCommand(input);
             const dataSyncResponse = await brAgentClient.send(command);
