@@ -13,6 +13,10 @@ export class WorkMailConstruct extends Construct {
     {
         super(scope, id);
         const workmailOrg = new WorkmailCreateOrgConstruct(this, 'WorkmailOrg', { nodeJsLayer: props.lambdaLayer });
-        const emailHandlerLambda = new WorkmailEmailHandlerConstruct(this, 'EmailHandler', { nodeJsLayer: props.lambdaLayer, agent:props.agent, agentAlias: props.agentAlias });
+        const emailHandlerLambda = new WorkmailEmailHandlerConstruct(this, 'EmailHandler', { 
+            nodeJsLayer: props.lambdaLayer, 
+            agent:props.agent, 
+            agentAlias: props.agentAlias,
+            secret:workmailOrg.workmailSecret });
     }
 }

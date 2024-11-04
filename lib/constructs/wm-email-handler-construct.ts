@@ -13,6 +13,7 @@ export class WorkmailEmailHandlerConstruct extends Construct {
         nodeJsLayer: lambda.LayerVersion;
         agent: cdk.aws_bedrock.CfnAgent;
         agentAlias: cdk.aws_bedrock.CfnAgentAlias;
+        secret: cdk.aws_secretsmanager.Secret;
      }) {
         super(scope, id);
         const accountId = cdk.Stack.of(this).account;
@@ -49,6 +50,12 @@ export class WorkmailEmailHandlerConstruct extends Construct {
             ],
             resources: ['*'] 
         }));
+        lambdaRole.addToPolicy(new iam.PolicyStatement({
+                actions: [
+                    'secretsmanager:GetSecretValue',
+                ],
+                resources: [props.secret.secretArn]
+        }));
 
         // Lambda function to manage WorkMail org and users
         const manageWorkMailLambda = new lambda.Function(this, 'WorkMailEmailHandlerLambda', {
@@ -63,7 +70,7 @@ export class WorkmailEmailHandlerConstruct extends Construct {
             environment:{
                 AGENT_ID:props.agent.attrAgentId,
                 AGENT_ALIAS_ID:props.agentAlias.attrAgentAliasId,
-                SUPPORT_EMAIL_ADDRESS: `support@${workmail_org_name}-${accountId}.awsapps.com`
+                SECRET_ARN: props.secret.secretArn,
             }
         });
 

@@ -79,7 +79,17 @@ async function onUpdate(event) {
 
 async function onDelete(orgName, resourceId) {
     const sanitizedResourceId = validateId(resourceId, 'resourceId');
-    const sanitizedOrgName = validateId(orgName, 'orgName');
+    
+    // Fetch orgName from Secrets Manager if available
+    let sanitizedOrgName;
+    try {
+        const secretData = await secretsManagerClient.send(new GetSecretValueCommand({ SecretId: process.env.SECRET_ARN }));
+        const secretString = secretData.SecretString ? JSON.parse(secretData.SecretString) : null;
+        sanitizedOrgName = secretString && secretString.orgName ? validateId(secretString.orgName, 'orgName') : validateId(orgName, 'orgName');
+    } catch (error) {
+        console.error(`Error retrieving org name from Secrets Manager, using parameter orgName: ${error}`);
+        sanitizedOrgName = validateId(orgName, 'orgName');
+    }
 
     const orgInfo = await findExistingOrganization(sanitizedOrgName);
     if (!orgInfo) {
@@ -89,20 +99,18 @@ async function onDelete(orgName, resourceId) {
             Message: `No organization found with the alias: ${sanitizedOrgName}. No action taken.`
         };
     }
+
     const organizationId = orgInfo.OrganizationId;
     console.log(`Initiating deletion for organization ID: ${organizationId} and user: ${userName}`);
+    
     try {
-        const input = {
-            OrganizationId: organizationId
-        };
-        const command = new ListUsersCommand(input);
-        const userAvail = await sendCommand(command);
+        const input = { OrganizationId: organizationId };
+        const userAvail = await sendCommand(new ListUsersCommand(input));
         for (const user of userAvail.Users) {
             if (user.Name === userName) {
                 await deregisterAndDeleteUser(organizationId, user.Id);
             }
         }
-
     } catch (error) {
         console.error(`Error while deleting user: ${error}`);
     }
@@ -110,15 +118,16 @@ async function onDelete(orgName, resourceId) {
     try {
         await deleteOrganization(organizationId);
         console.log(`Organization ${organizationId} and user ${userName} deleted successfully.`);
-    }
-    catch (error) {
+    } catch (error) {
         console.error(`Error while deleting organization: ${error}`);
     }
+
     return {
         PhysicalResourceId: resourceId,
         Message: 'Delete operation complete'
     };
 }
+
 
 async function manageUser(orgId, orgName) {
     const sanitizedOrgId = validateId(orgId, 'orgId');
@@ -174,7 +183,7 @@ async function createUser(orgId, orgName) {
         console.log(`User ${userName} created with ID: ${userResponse.UserId}`);
         await secretsManagerClient.send(new PutSecretValueCommand({
             SecretId: process.env.SECRET_ARN,
-            SecretString: JSON.stringify({ username: userName, password: password })
+            SecretString: JSON.stringify({ username: userName, password: password, email: `${userName}@${sanitizedOrgName}.awsapps.com`.toLowerCase(), orgName:sanitizedOrgName })
         }));
         console.log(`Credentials stored in Secrets Manager under ARN: ${process.env.SECRET_ARN}`);
         try {
@@ -208,12 +217,27 @@ async function findExistingUser(orgId, userName) {
 function generateSecurePassword() {
     const length = 16;
     const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+";
-    let retVal = "";
-    const randomBytes = crypto.randomBytes(length);
+    const lowercase = "abcdefghijklmnopqrstuvwxyz";
+    const uppercase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    const numbers = "0123456789";
+    const special = "!@#$%^&*()_+";
 
-    for (let i = 0; i < length; i++) {
+    let retVal = "";
+
+    // Ensure at least one character from each category
+    retVal += lowercase[Math.floor(Math.random() * lowercase.length)];
+    retVal += uppercase[Math.floor(Math.random() * uppercase.length)];
+    retVal += numbers[Math.floor(Math.random() * numbers.length)];
+    retVal += special[Math.floor(Math.random() * special.length)];
+
+    const randomBytes = crypto.randomBytes(length - 4);
+
+    for (let i = 0; i < length - 4; i++) {
         retVal += charset[randomBytes[i] % charset.length];
     }
+
+    // Shuffle the password to randomize positions of guaranteed characters
+    retVal = retVal.split('').sort(() => 0.5 - Math.random()).join('');
 
     return retVal;
 }

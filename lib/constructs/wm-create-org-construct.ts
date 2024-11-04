@@ -7,17 +7,20 @@ import * as iam from 'aws-cdk-lib/aws-iam';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import { LogGroup } from "aws-cdk-lib/aws-logs";
 import { workmail_org_name, workmail_secret_name } from "../name_constants";
+import * as crypto from 'crypto';
 
 export class WorkmailCreateOrgConstruct extends Construct {
+
+    readonly workmailSecret:secretsmanager.Secret;
 
     constructor(scope: Construct, id: string, props: { nodeJsLayer: lambda.LayerVersion; }) {
         super(scope, id);
 
         // Create a hashed unique identifier based on the account ID
-        const accountId = cdk.Stack.of(this).account;
+        const accountIdHash = this.createAccountIdHash(cdk.Stack.of(this).account);
 
         // Create a secret in Secrets Manager
-        const workmailSecret = new secretsmanager.Secret(this, 'WorkmailSecret', {
+        this.workmailSecret = new secretsmanager.Secret(this, 'WorkmailSecret', {
             secretName: `${workmail_secret_name}_${id}`, 
             description: 'Stores credentials for the Workmail support user'
         });
@@ -51,7 +54,7 @@ export class WorkmailCreateOrgConstruct extends Construct {
                 'secretsmanager:CreateSecret',
                 'secretsmanager:UpdateSecret'
             ],
-            resources: [workmailSecret.secretArn]
+            resources: [this.workmailSecret.secretArn]
         }));
 
         // Lambda function to manage WorkMail org and users
@@ -64,8 +67,8 @@ export class WorkmailCreateOrgConstruct extends Construct {
             timeout: cdk.Duration.minutes(5),
             logGroup: logGroup,
             environment: {
-                SECRET_ARN: workmailSecret.secretArn,
-                WORKMAIL_ORG_NAME: `${workmail_org_name}-${accountId}` 
+                SECRET_ARN: this.workmailSecret.secretArn,
+                WORKMAIL_ORG_NAME: `${workmail_org_name}-${accountIdHash}` 
             }
         });
 
@@ -77,5 +80,8 @@ export class WorkmailCreateOrgConstruct extends Construct {
         const createWorkmailResource = new cdk.CustomResource(this, 'CreateWorkmailCR', {
             serviceToken: provider.serviceToken,
         });
+    }
+    private createAccountIdHash(accountId: string): string {
+        return crypto.createHash('sha256').update(accountId.trim().toLowerCase()).digest('hex').substring(0, 12);
     }
 }
