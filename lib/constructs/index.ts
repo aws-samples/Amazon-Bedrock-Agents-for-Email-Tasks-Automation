@@ -10,4 +10,5 @@ export * from './agent-construct'
 export * from './kb-construct'
 export * from './workmail-construct'
 export * from './resturant-agent-action-group'
+export * from './support-agent-action-group'
 export * from './restaurant-assist-database-construct';

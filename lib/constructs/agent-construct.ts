@@ -2,7 +2,7 @@ import * as cdk from 'aws-cdk-lib';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import { Construct } from 'constructs';
 import { BedrockAgentBlueprintsConstruct, AgentDefinitionBuilder } from '@aws/agents-for-amazon-bedrock-blueprints';
-import { GetAgentActionGroup, GetGuardRail } from '.';
+import { GetResturantAgentActionGroup, GetGuardRail, GetSupportAgentActionGroup } from '.';
 import { AgentInstructionPrompt } from '../prompts';
 import { agent_name } from '../name_constants';
 
@@ -29,7 +29,8 @@ export class BedrockAgentConstruct extends Construct {
         // Create the Bedrock Agent Blueprint
         const agentConstruct = new BedrockAgentBlueprintsConstruct(this, 'BedrockAgent', {
             agentDefinition: agentDef,
-            actionGroups: [GetAgentActionGroup(this)],
+            //actionGroups: [GetResturantAgentActionGroup(this)],
+            actionGroups: [GetSupportAgentActionGroup(this)],
             guardrail: this.guardRail,
         });
 
@@ -37,7 +38,7 @@ export class BedrockAgentConstruct extends Construct {
             {
                 knowledgeBaseState: 'ENABLED',
                 knowledgeBaseId: props.bedrockKb.attrKnowledgeBaseId,
-                description: 'Access the knowledge base when customers ask about the plates in the menu.'
+                description: 'Access the knowledge base when customers ask about the bank or financials.'
             }
         ];
         agentConstruct.agent.autoPrepare = true;

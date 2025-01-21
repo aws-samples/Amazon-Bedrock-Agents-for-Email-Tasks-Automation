@@ -7,7 +7,7 @@ import { join } from 'path';
 import { RestaurantAssistDatabaseConstruct } from './restaurant-assist-database-construct';
 import { agent_booking_action_group_name } from '../name_constants';
 
-export function GetAgentActionGroup(scope: Construct): AgentActionGroup {
+export function GetResturantAgentActionGroup(scope: Construct): AgentActionGroup {
 
     const managedPolicies = [
         ManagedPolicy.fromAwsManagedPolicyName('AmazonDynamoDBFullAccess')
