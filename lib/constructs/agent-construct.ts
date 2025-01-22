@@ -20,6 +20,7 @@ export class BedrockAgentConstruct extends Construct {
         const agentDef = new AgentDefinitionBuilder(this, 'AgentProps', {})
             .withAgentName(agent_name)
             .withInstruction(AgentInstructionPrompt)
+            //.withFoundationModel('amazon.nova-pro-v1:0')
             .withFoundationModel('anthropic.claude-3-sonnet-20240229-v1:0')
             .withUserInput()
             .build();

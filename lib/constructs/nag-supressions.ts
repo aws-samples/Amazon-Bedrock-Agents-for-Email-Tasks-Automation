@@ -90,9 +90,14 @@ export function ApplyNagRules(stack: Stack): void {
     );
 
     // Table booking Lambda
+    // NagSuppressions.addResourceSuppressionsByPath(
+    //     stack,
+    //     '/EmailSupportAgent/BedrockAgentConstruct/TableBookingsActionGroup/LambdaRole/Resource',
+    //     [{ id: 'AwsSolutions-IAM4', reason: 'basic execution role in place for log group creation' }]
+    // );
     NagSuppressions.addResourceSuppressionsByPath(
         stack,
-        '/EmailSupportAgent/BedrockAgentConstruct/TableBookingsActionGroup/LambdaRole/Resource',
+        '/EmailSupportAgent/BedrockAgentConstruct/SupportCaseActionGroup/LambdaRole/Resource',
         [{ id: 'AwsSolutions-IAM4', reason: 'basic execution role in place for log group creation' }]
     );
     // Temporary password

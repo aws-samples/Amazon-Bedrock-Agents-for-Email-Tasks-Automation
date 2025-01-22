@@ -8,7 +8,7 @@ export class SupportCaseAssistDatabaseConstruct extends Construct {
         // Create a new DynamoDB table named 'BookingTable'
         new TableV2(this, 'SupportRequestTable', {
             // Define the partition key as 'booking_id' with type string
-            partitionKey: { name: 'id', type: AttributeType.STRING },
+            partitionKey: { name: 'support_case_id', type: AttributeType.STRING },
             // Set the billing mode to on-demand
             billing: Billing.onDemand(),
             // Set the table name explicitly to 'SupportRequestTable'
